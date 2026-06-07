@@ -18,7 +18,9 @@ FREQUENCY_RANGE = (100, 10000)  # Hz
 
 frequency_list = np.logspace(np.log10(FREQUENCY_RANGE[0]), np.log10(FREQUENCY_RANGE[1]), num=15)
 
-data = [{frequency_list[i]: [0, 1] for i in range(len(frequency_list))}]  # 10 channels of data
+CHANNEL_COUNT = 10
+# Data per channel: list of per-frequency [min, max] volumes.
+data = [[[0, 1] for _ in range(len(frequency_list))] for _ in range(CHANNEL_COUNT)]
 
 state = {
     "enter_counter": 0,
@@ -47,16 +49,15 @@ def amplitude_to_db(amplitude_ref, amplitude):
 
 def update_plot():
 
+    ax.set_xscale("linear")
     ax.clear()
     ax_ref.clear()
 
     ref_interp = None
     if len(data[0]) >= 2:
-        ref_items = sorted(data[0].items())
-        frequencies, volumes = zip(*ref_items)
-        volumes = np.mean(np.array(volumes), axis=1)
+        volumes = np.mean(np.array(data[0]), axis=1)
         ref_interp = scipy.interpolate.interp1d(
-            frequencies,
+            frequency_list,
             volumes,
             kind="linear",
             bounds_error=False,
@@ -71,8 +72,8 @@ def update_plot():
             color=plt.cm.tab10(0),
         )
         ax_ref.scatter(
-            frequencies,
-            volumes,
+            frequency_list,
+            ref_interp(frequency_list),
             color=plt.cm.tab10(0),
             edgecolor="black",
             alpha=0.3,
@@ -81,11 +82,9 @@ def update_plot():
 
     for i in range(1, len(data)):
         if len(data[i]) >= 2 and ref_interp is not None:
-            channel_items = sorted(data[i].items())
-            frequencies, volumes = zip(*channel_items)
-            volumes = np.mean(np.array(volumes), axis=1)
+            volumes = np.mean(np.array(data[i]), axis=1)
             interp = scipy.interpolate.interp1d(
-                frequencies,
+                frequency_list,
                 volumes,
                 kind="linear",
                 bounds_error=False,
@@ -99,8 +98,8 @@ def update_plot():
                 color=plt.cm.tab10(i),
             )
             ax.scatter(
-                frequencies,
-                amplitude_to_db(ref_interp(frequencies), volumes),
+                frequency_list,
+                amplitude_to_db(ref_interp(frequency_list), interp(frequency_list)),
                 color=plt.cm.tab10(i),
                 edgecolor="black",
                 s=50,
@@ -204,10 +203,10 @@ if __name__ == "__main__":
 
     volume_slider = ttk.Scale(
         frame, from_=0.0, to=1.0, orient="horizontal",
-        command=update_volume, value=state["volume"],
+        command=update_volume, value=1.0,
     )
     volume_slider.grid(row=4, column=0, columnspan=2, sticky="ew")
-    update_volume(0)
+    update_volume(1.0)
 
     play_label = ttk.Label(frame, text="Playing")
     play_label.grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
@@ -236,8 +235,8 @@ if __name__ == "__main__":
     def on_enter(event=None):
         i = state["enter_counter"] % 2
         state["enter_counter"] += 1
-
-        data[state["data_key"]][frequency_list[state["frequency_i"]]][i] = state["volume"]
+        
+        data[state["data_key"]][state["frequency_i"]][i] = state["volume"]
 
         if i != 0:
             state["frequency_i"] += 1
